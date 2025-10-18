@@ -1,5 +1,4 @@
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:5001/api";
-const API_ORIGIN = API_BASE_URL.replace(/\/api$/i, "");
+import { API_BASE_URL, API_ORIGIN } from "../constants/api";
 
 export const resolveImageUrl = (path) => {
   if (!path) return null;
