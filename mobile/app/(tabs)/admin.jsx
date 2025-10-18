@@ -10,10 +10,13 @@ import {
   TextInput,
   Image,
   Dimensions,
+  Platform,
 } from "react-native";
 import { BarChart, LineChart, PieChart } from "react-native-chart-kit";
 // eslint-disable-next-line import/no-unresolved
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import { useAuth } from "@/contexts/AuthContext";
 import { orderApi, catalogApi, adminApi } from "@/services/api";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -158,6 +161,7 @@ export default function AdminScreen() {
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [dashboardError, setDashboardError] = useState(null);
+  const [downloadingFormat, setDownloadingFormat] = useState(null);
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
   const styles = useMemo(() => createStyles(colors), [colors]);
   const chartWidth = useMemo(() => Math.max(Dimensions.get("window").width - 48, 320), []);
@@ -725,6 +729,128 @@ export default function AdminScreen() {
     return metrics;
   }, [dashboard]);
 
+  const appliedFilters = useMemo(() => dashboard?.filters?.applied || {}, [dashboard]);
+  const isDownloading = Boolean(downloadingFormat);
+  const isDownloadingPdf = downloadingFormat === "pdf";
+  const isDownloadingExcel = downloadingFormat === "excel";
+  const canDownload = Boolean(dashboard) && !dashboardLoading;
+
+  const getAppliedFiltersParams = useCallback(() => {
+    const params = {};
+    if (appliedFilters.year) {
+      params.year = appliedFilters.year;
+      if (appliedFilters.month) {
+        params.month = appliedFilters.month;
+      }
+    } else if (appliedFilters.rangeMonths) {
+      params.range = appliedFilters.rangeMonths;
+    }
+    if (appliedFilters.fromDate) {
+      params.from = appliedFilters.fromDate;
+    }
+    if (appliedFilters.toDate) {
+      params.to = appliedFilters.toDate;
+    }
+    return params;
+  }, [appliedFilters]);
+
+  const handleDownloadDashboard = useCallback(
+    async (format) => {
+      if (!token) {
+        Alert.alert("Sesión requerida", "Inicia sesión nuevamente para descargar el reporte.");
+        return;
+      }
+
+      const targetFormat = format === "excel" || format === "xls" ? "excel" : "pdf";
+      setDownloadingFormat(targetFormat);
+
+      try {
+        const params = getAppliedFiltersParams();
+        const url = adminApi.dashboardExportUrl(params, targetFormat);
+        const parts = [];
+
+        if (appliedFilters.year) {
+          parts.push(String(appliedFilters.year));
+          if (appliedFilters.month) {
+            parts.push(String(appliedFilters.month).padStart(2, "0"));
+          }
+        } else if (appliedFilters.rangeMonths) {
+          parts.push(`${appliedFilters.rangeMonths}m`);
+        } else if (appliedFilters.fromDate && appliedFilters.toDate) {
+          parts.push(`${appliedFilters.fromDate}_a_${appliedFilters.toDate}`);
+        }
+
+        const suffix = parts.length ? parts.join("-") : "resumen";
+        const safeSuffix = suffix.replace(/[^a-zA-Z0-9_-]/g, "-");
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        const extension = targetFormat === "excel" ? "xls" : "pdf";
+        const fileName = `dashboard-${safeSuffix}-${timestamp}.${extension}`;
+
+        if (Platform.OS === "web") {
+          const response = await fetch(url, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+
+          if (!response.ok) {
+            let message = "No se pudo descargar el archivo";
+            try {
+              const text = await response.text();
+              if (text) {
+                try {
+                  const parsed = JSON.parse(text);
+                  message = parsed.message || message;
+                } catch (_jsonError) {
+                  message = text;
+                }
+              }
+            } catch (_readError) {
+              // ignore parsing errors and use default message
+            }
+            throw new Error(message);
+          }
+
+          const blob = await response.blob();
+          const blobUrl = window.URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = blobUrl;
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(blobUrl);
+          return;
+        }
+
+        if (!FileSystem.cacheDirectory) {
+          throw new Error("No se encontró un directorio de descargas disponible");
+        }
+
+        const targetUri = `${FileSystem.cacheDirectory}${fileName}`;
+        const downloadResult = await FileSystem.downloadAsync(url, targetUri, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (await Sharing.isAvailableAsync()) {
+          const mimeType =
+            targetFormat === "excel"
+              ? "application/vnd.ms-excel"
+              : "application/pdf";
+          await Sharing.shareAsync(downloadResult.uri, {
+            mimeType,
+            dialogTitle: `Compartir ${targetFormat === "excel" ? "Excel" : "PDF"}`,
+          });
+        } else {
+          Alert.alert("Descarga completada", `El archivo se guardó en: ${downloadResult.uri}`);
+        }
+      } catch (err) {
+        Alert.alert("No se pudo descargar", err.message || "Intenta nuevamente más tarde");
+      } finally {
+        setDownloadingFormat(null);
+      }
+    },
+    [token, getAppliedFiltersParams, appliedFilters]
+  );
+
   if (!isAdmin) {
     return (
       <View style={styles.centered}>
@@ -855,6 +981,53 @@ export default function AdminScreen() {
                 </ScrollView>
               </View>
             )}
+          </View>
+
+          <View style={styles.exportButtonsRow}>
+            <TouchableOpacity
+              style={[
+                styles.exportButton,
+                isDownloadingPdf && styles.exportButtonActive,
+                (!canDownload || (isDownloading && !isDownloadingPdf)) && styles.exportButtonDisabled,
+              ]}
+              onPress={() => handleDownloadDashboard("pdf")}
+              disabled={!canDownload || isDownloading}
+            >
+              {isDownloadingPdf ? (
+                <ActivityIndicator color={colors.white} />
+              ) : (
+                <Text
+                  style={[
+                    styles.exportButtonText,
+                    isDownloadingPdf && styles.exportButtonTextActive,
+                  ]}
+                >
+                  Descargar PDF
+                </Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.exportButton,
+                isDownloadingExcel && styles.exportButtonActive,
+                (!canDownload || (isDownloading && !isDownloadingExcel)) && styles.exportButtonDisabled,
+              ]}
+              onPress={() => handleDownloadDashboard("excel")}
+              disabled={!canDownload || isDownloading}
+            >
+              {isDownloadingExcel ? (
+                <ActivityIndicator color={colors.white} />
+              ) : (
+                <Text
+                  style={[
+                    styles.exportButtonText,
+                    isDownloadingExcel && styles.exportButtonTextActive,
+                  ]}
+                >
+                  Descargar Excel
+                </Text>
+              )}
+            </TouchableOpacity>
           </View>
 
           {dashboardError && <Text style={styles.error}>{dashboardError}</Text>}
@@ -1553,6 +1726,34 @@ const createStyles = (colors) => StyleSheet.create({
     elevation: 3,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  exportButtonsRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 12,
+    flexWrap: "wrap",
+  },
+  exportButton: {
+    flexBasis: "48%",
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+    backgroundColor: colors.white,
+  },
+  exportButtonActive: {
+    backgroundColor: colors.primary,
+  },
+  exportButtonDisabled: {
+    opacity: 0.6,
+  },
+  exportButtonText: {
+    color: colors.primary,
+    fontWeight: "700",
+  },
+  exportButtonTextActive: {
+    color: colors.white,
   },
   filterHeading: {
     fontSize: 16,

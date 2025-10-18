@@ -49,6 +49,16 @@ const request = async (path, { method = "GET", token, body } = {}) => {
   return handleResponse(response);
 };
 
+const buildDashboardQuery = (params = {}) => {
+  const query = new URLSearchParams();
+  if (params.year) query.set("year", String(params.year));
+  if (params.month) query.set("month", String(params.month));
+  if (params.range) query.set("range", String(params.range));
+  if (params.from) query.set("from", String(params.from));
+  if (params.to) query.set("to", String(params.to));
+  return query;
+};
+
 export const authApi = {
   register: (payload) => request("/auth/register", { method: "POST", body: payload }),
   login: (payload) => request("/auth/login", { method: "POST", body: payload }),
@@ -91,14 +101,17 @@ export const orderApi = {
 
 export const adminApi = {
   dashboard: (token, params = {}) => {
-    const query = new URLSearchParams();
-    if (params.year) query.set("year", String(params.year));
-    if (params.month) query.set("month", String(params.month));
-    if (params.range) query.set("range", String(params.range));
-    if (params.from) query.set("from", String(params.from));
-    if (params.to) query.set("to", String(params.to));
+    const query = buildDashboardQuery(params);
     const path = `/admin/dashboard${query.toString() ? `?${query.toString()}` : ""}`;
     return request(path, { token });
+  },
+  dashboardExportUrl: (params = {}, format = "pdf") => {
+    const query = buildDashboardQuery(params);
+    if (format) {
+      query.set("format", String(format));
+    }
+    const queryString = query.toString();
+    return `${API_BASE_URL}/admin/dashboard/export${queryString ? `?${queryString}` : ""}`;
   },
   users: (token) => request("/admin/users", { token }),
   createUser: (token, payload) => request("/admin/users", { method: "POST", token, body: payload }),

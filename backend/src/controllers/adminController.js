@@ -7,6 +7,7 @@ import {
   listUsers,
   updateUser,
 } from "../services/userService.js";
+import { generateDashboardPdf, generateDashboardExcel } from "../utils/dashboardExport.js";
 
 const parseIntegerParam = (value, { min, max } = {}) => {
   if (value == null) return undefined;
@@ -17,21 +18,56 @@ const parseIntegerParam = (value, { min, max } = {}) => {
   return parsed;
 };
 
+const parseDashboardFilters = (req) => ({
+  year: parseIntegerParam(req.query.year, { min: 2000, max: 2100 }),
+  month: parseIntegerParam(req.query.month, { min: 1, max: 12 }),
+  range: req.query.range ? String(req.query.range) : undefined,
+  from: req.query.from ? String(req.query.from) : undefined,
+  to: req.query.to ? String(req.query.to) : undefined,
+});
+
 export const dashboardController = async (req, res) => {
   try {
-    const filters = {
-      year: parseIntegerParam(req.query.year, { min: 2000, max: 2100 }),
-      month: parseIntegerParam(req.query.month, { min: 1, max: 12 }),
-      range: req.query.range ? String(req.query.range) : undefined,
-      from: req.query.from ? String(req.query.from) : undefined,
-      to: req.query.to ? String(req.query.to) : undefined,
-    };
+    const filters = parseDashboardFilters(req);
 
     const data = await getDashboardMetrics(filters);
     res.json(data);
   } catch (error) {
     console.error("Error obteniendo métricas administrativas", error);
     res.status(500).json({ message: "Error interno del servidor" });
+  }
+};
+
+export const exportDashboardController = async (req, res) => {
+  try {
+    const format = String(req.query.format || "pdf").toLowerCase();
+    const filters = parseDashboardFilters(req);
+    const metrics = await getDashboardMetrics(filters);
+
+    if (format === "pdf") {
+      const buffer = await generateDashboardPdf(metrics);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="dashboard-${Date.now()}.pdf"`
+      );
+      return res.send(buffer);
+    }
+
+    if (["excel", "xlsx", "xls"].includes(format)) {
+      const buffer = await generateDashboardExcel(metrics);
+      res.setHeader("Content-Type", "application/vnd.ms-excel");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="dashboard-${Date.now()}.xls"`
+      );
+      return res.send(buffer);
+    }
+
+    return res.status(400).json({ message: "Formato no soportado" });
+  } catch (error) {
+    console.error("Error exportando métricas administrativas", error);
+    return res.status(500).json({ message: "Error interno del servidor" });
   }
 };
 

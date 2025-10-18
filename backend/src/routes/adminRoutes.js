@@ -3,6 +3,7 @@ import { body, param } from "express-validator";
 import {
   createUserController,
   dashboardController,
+  exportDashboardController,
   listUsersController,
   updateUserController,
 } from "../controllers/adminController.js";
@@ -13,6 +14,7 @@ const router = Router();
 router.use(authenticate, requireAdmin);
 
 router.get("/dashboard", dashboardController);
+router.get("/dashboard/export", exportDashboardController);
 router.get("/users", listUsersController);
 router.post(
   "/users",
