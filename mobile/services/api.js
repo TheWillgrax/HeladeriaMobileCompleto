@@ -117,3 +117,5 @@ export const adminApi = {
   updateUser: (token, id, payload) =>
     request(`/admin/users/${id}`, { method: "PUT", token, body: payload }),
 };
+
+export { API_BASE_URL, API_ORIGIN };
