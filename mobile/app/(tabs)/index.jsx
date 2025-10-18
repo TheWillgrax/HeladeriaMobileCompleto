@@ -22,7 +22,7 @@ import SocialFloatingButtons from "@/components/SocialFloatingButtons";
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 
 const heroImage = {
-  uri: "https://images.unsplash.com/photo-1527515637462-cff94eecc1ac?auto=format&fit=crop&w=500&q=60",
+  uri: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcToRBY5AiDOhLvI_pKAPMVq1JqXAkIRo7jwzg&s",
 };
 const fallbackProductImage = "https://images.unsplash.com/photo-1488900128323-21503983a07e?auto=format&fit=crop&w=600&q=60";
 
@@ -367,7 +367,7 @@ export default function HomeScreen() {
             <View style={styles.heroChip}>
               <Text style={styles.heroChipText}>Nueva temporada</Text>
             </View>
-            <Text style={styles.heroTitle}>Sabores hechos con amor mexicano</Text>
+            <Text style={styles.heroTitle}>Sabores hechos con amor guatemalteco</Text>
             <Text style={styles.heroSubtitle}>
               Descubre nuestras combinaciones de temporada, paletas artesanales y malteadas cremosas.
             </Text>
