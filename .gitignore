@@ -1,0 +1,11 @@
+node_modules/
+backend/node_modules/
+mobile/node_modules/
+.env
+backend/.env
+mobile/.env
+.DS_Store
+expo-env.d.ts
+
+# build outputs
+backend/src/db/migrations/
